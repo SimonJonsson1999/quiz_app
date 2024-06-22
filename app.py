@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import simpledialog, messagebox, ttk
 from PIL import Image, ImageTk
 from geopy.distance import geodesic
+import argparse
 
 class MapApp:
     def __init__(self, root, num_teams, maps, secret_locations, questions):
@@ -19,22 +20,19 @@ class MapApp:
 
         # Setup initial map image (will resize in self.configure_window)
         self.original_map_image = Image.open(self.maps[self.current_map_index])
-        self.map_image = self.original_map_image.resize((800, 600), Image.Resampling.LANCZOS)
-        self.map_photo = ImageTk.PhotoImage(self.map_image)
+        self.map_photo, self.scaled_secret_location = self.resize_image(self.original_map_image, self.secret_locations[self.current_map_index])
 
         # Canvas for displaying the map
-        self.canvas = tk.Canvas(root)
+        self.canvas = tk.Canvas(root, width=self.map_photo.width(), height=self.map_photo.height())
         self.canvas.grid(row=1, column=0, columnspan=3, sticky='nsew')
         self.image_on_canvas = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.map_photo)
 
-        
-        self.secret_location = self.secret_locations[self.current_map_index]
+        self.secret_location = self.scaled_secret_location
         self.question = self.questions[self.current_map_index]
         self.num_teams = num_teams
         self.guesses = {team: None for team in range(1, num_teams + 1)}
         self.score = {team: 0 for team in range(1, num_teams + 1)}
         self.current_team = 1
-
 
         self.team_colors = ['red', 'green', 'blue', 'orange', 'purple', 'magenta', 'yellow', 'cyan', 'brown', 'pink']
         self.pin_color = self.team_colors[0]
@@ -71,17 +69,13 @@ class MapApp:
         self.confirm_button = ttk.Button(root, text="Confirm Guess", command=self.confirm_guess, style='Large.TButton')
         self.confirm_button.grid(row=3, column=0, sticky='', padx=10)
         
-        self.confirm_button = ttk.Button(root, text="Show Result", command=self.check_guesses, style='Large.TButton')
-        self.confirm_button.grid(row=4, column=0, sticky='', padx=10)
+        self.result_button = ttk.Button(root, text="Show Result", command=self.check_guesses, style='Large.TButton')
+        self.result_button.grid(row=4, column=0, sticky='', padx=10)
 
         # Configure the grid to scale with the window resizing
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
-
-        # Ensure the canvas and text areas expand properly
         self.root.grid_columnconfigure(1, weight=1)
-
-    
 
     def move_pin(self, event):
         x, y = event.x, event.y
@@ -89,6 +83,24 @@ class MapApp:
         
     def toggle_fullscreen(self, event=None):
         self.root.attributes('-fullscreen', False)
+        
+    def resize_image(self, image, secret_location):
+        max_width, max_height = 1500, 650
+        width_ratio = max_width / image.width
+        height_ratio = max_height / image.height
+        print(width_ratio,height_ratio)
+        min_ratio = min(width_ratio, height_ratio)
+        new_width = int(image.width * min_ratio)
+        new_height = int(image.height * min_ratio)
+        resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        print(resized_image.size)
+
+        # Adjust the secret location according to the new image size
+        scaled_secret_location = (secret_location[0] * min_ratio, secret_location[1] * min_ratio)
+        print(scaled_secret_location)
+
+        return ImageTk.PhotoImage(resized_image), scaled_secret_location
+
     
     def confirm_guess(self):
         pin_coords = self.canvas.coords(self.pin)
@@ -108,17 +120,18 @@ class MapApp:
             self.canvas.itemconfig(self.pin, state='hidden')
             self.turn_label.config(text="", bg='white')
 
-    def load_next_map(self):    
-        self.current_map_index = (self.current_map_index + 1) % len(self.maps)
+    def load_next_map(self):   
+        if self.current_map_index >= len(self.maps) - 1:
+            self.display_final_screen() 
+        self.current_map_index += 1
         self.original_map_image = Image.open(self.maps[self.current_map_index])
-        self.map_image = self.original_map_image.resize((800, 600), Image.Resampling.LANCZOS)
-        self.map_photo = ImageTk.PhotoImage(self.map_image)
+        self.map_photo, self.scaled_secret_location = self.resize_image(self.original_map_image, self.secret_locations[self.current_map_index])
         
         # Clear the canvas and reset elements
         self.canvas.delete("all")
         self.image_on_canvas = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.map_photo)
         
-        self.secret_location = self.secret_locations[self.current_map_index]
+        self.secret_location = self.scaled_secret_location
         self.question = self.questions[self.current_map_index]
         self.question_label.config(text=self.question)
         
@@ -174,35 +187,51 @@ class MapApp:
             score_text += f"Team {team}: {score} points\n"
         self.score_label.config(text=score_text.strip())
         
-        
-        
-        
+    def display_final_screen(self):
+        # Clear the main window
+        for widget in self.root.winfo_children():
+            widget.destroy()
 
+        # Create final screen
+        final_frame = tk.Frame(self.root)
+        final_frame.pack(fill='both', expand=True)
 
-def start_app():
+        final_label = tk.Label(final_frame, text="Final Results", font=('Helvetica', 24))
+        final_label.pack(pady=20)
+
+        score_text = "Final Scoreboard:\n"
+        sorted_scores = sorted(self.score.items(), key=lambda item: item[1])
+        for team, score in sorted_scores:
+            score_text += f"Team {team}: {score} points\n"
+        
+        score_label = tk.Label(final_frame, text=score_text, font=('Helvetica', 16), justify='left')
+        score_label.pack(pady=20)
+
+        exit_button = ttk.Button(final_frame, text="Exit", command=self.root.quit, style='Large.TButton')
+        exit_button.pack(pady=20)
+
+def start_app(num_teams):
     root = tk.Tk()
     root.withdraw()  # Hide the main window initially
     
-    num_teams = simpledialog.askinteger("Input", "Enter the number of teams:", minvalue=1, maxvalue=10)
-    
     if num_teams:
         maps = [
-            r"images\sweden1.jpg",
-            r"images\sweden.jpg",
+            r"images\sweden_cities.png",
         ]
         secret_locations = [
-            (340, 480),  # Secret location for first map
-            (200, 300),  # Secret location for second map
+            (2581.50, 1448.58),  # Secret location for the map with cities (Linköping)
         ]
         questions = [
             "Where is Linköping?",
-            "Where is Degerfors?",
         ]
-        new_size = (1000, 750)  # Set the new size for the map image
         
         root.deiconify()  # Show the main window
-        app = MapApp(root, num_teams, maps,secret_locations,questions)
+        app = MapApp(root, num_teams, maps, secret_locations, questions)
         root.mainloop()
 
 if __name__ == "__main__":
-    start_app()
+    parser = argparse.ArgumentParser(description="Guess the Secret Location Game")
+    parser.add_argument('--teams', type=int, required=True, help='Number of teams')
+    args = parser.parse_args()
+    
+    start_app(args.teams)
