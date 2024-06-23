@@ -10,6 +10,11 @@ class MapApp:
         self.root.title("Guess the Secret Location")
         self.root.attributes('-fullscreen', True)  # Start in fullscreen mode
 
+        self.image_offset_x = 650
+        self.image_offset_y = 50
+        
+        
+
         # Bind Esc key to the toggle_fullscreen function
         self.root.bind('<Escape>', self.toggle_fullscreen)
 
@@ -25,7 +30,7 @@ class MapApp:
         # Canvas for displaying the map
         self.canvas = tk.Canvas(root, width=self.map_photo.width(), height=self.map_photo.height())
         self.canvas.grid(row=1, column=0, columnspan=3, sticky='nsew')
-        self.image_on_canvas = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.map_photo)
+        self.image_on_canvas = self.canvas.create_image(self.image_offset_x, self.image_offset_y, anchor=tk.NW, image=self.map_photo)
 
         self.secret_location = self.scaled_secret_location
         self.question = self.questions[self.current_map_index]
@@ -38,7 +43,7 @@ class MapApp:
         self.pin_color = self.team_colors[0]
 
         # Create a draggable pin
-        self.pin_radius = 5
+        self.pin_radius = 2
         self.pin = self.canvas.create_oval(50, 50, 50 + self.pin_radius * 2, 50 + self.pin_radius * 2, fill=self.pin_color)
 
         # Label widget for displaying the current team's turn
@@ -77,6 +82,7 @@ class MapApp:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_columnconfigure(1, weight=1)
 
+
     def move_pin(self, event):
         x, y = event.x, event.y
         self.canvas.coords(self.pin, x - self.pin_radius, y - self.pin_radius, x + self.pin_radius, y + self.pin_radius)
@@ -96,9 +102,12 @@ class MapApp:
         print(resized_image.size)
 
         # Adjust the secret location according to the new image size
-        scaled_secret_location = (secret_location[0] * min_ratio, secret_location[1] * min_ratio)
+        scaled_secret_location = (
+        int(secret_location[0] * min_ratio + self.image_offset_x),  # Apply X offset
+        int(secret_location[1] * min_ratio + self.image_offset_y)   # Apply Y offset
+    )
         print(scaled_secret_location)
-
+        # return ImageTk.PhotoImage(image), secret_location
         return ImageTk.PhotoImage(resized_image), scaled_secret_location
 
     
@@ -129,7 +138,7 @@ class MapApp:
         
         # Clear the canvas and reset elements
         self.canvas.delete("all")
-        self.image_on_canvas = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.map_photo)
+        self.image_on_canvas = self.canvas.create_image(self.image_offset_x, self.image_offset_y, anchor=tk.NW, image=self.map_photo)
         
         self.secret_location = self.scaled_secret_location
         self.question = self.questions[self.current_map_index]
@@ -216,13 +225,16 @@ def start_app(num_teams):
     
     if num_teams:
         maps = [
-            r"images\sweden_cities.png",
+            r"images\sweden.png",
+            r"images\sweden.png",
         ]
         secret_locations = [
-            (2581.50, 1448.58),  # Secret location for the map with cities (Linköping)
+            (634, 1388),
+            (488, 1283),  # Secret location for the map with cities (Linköping)
         ]
         questions = [
             "Where is Linköping?",
+            "Where is Degerfors?",
         ]
         
         root.deiconify()  # Show the main window

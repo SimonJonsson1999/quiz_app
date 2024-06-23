@@ -20,11 +20,6 @@ def get_city_coordinates(city):
 # Get coordinates for each city
 city_coords = {city: get_city_coordinates(city) for city in cities}
 
-# Print the coordinates for Degerfors and Linköping
-degerfors_coords = city_coords['Degerfors']
-linkoping_coords = city_coords['Linköping']
-print(f"Degerfors coordinates: {degerfors_coords}")
-print(f"Linköping coordinates: {linkoping_coords}")
 
 # Create a GeoDataFrame for the cities
 city_gdf = gpd.GeoDataFrame(
@@ -33,32 +28,27 @@ city_gdf = gpd.GeoDataFrame(
     geometry=gpd.points_from_xy([coord[1] for coord in city_coords.values()], [coord[0] for coord in city_coords.values()])
 )
 
-# Function to calculate pixel coordinates in the saved image
-def get_pixel_coords(ax, geo_x, geo_y, fig_dpi):
+def get_pixel_coords(ax, geo_x, geo_y, save_dpi):
+    # Convert geographical coordinates (longitude, latitude) to display coordinates
     display_coords = ax.transData.transform((geo_x, geo_y))
-    pixel_coords = display_coords * fig_dpi / ax.figure.dpi
+    
+    # Display coordinates are in points (1 point = 1/72 inches). 
+    # To convert to pixels, multiply by the save_dpi and divide by 72 (points per inch).
+    pixel_coords = (display_coords[0] * save_dpi / 72, display_coords[1] * save_dpi / 72)
     return pixel_coords
 
-# Plotting the map with cities and saving it
 def plot_map_with_cities():
-    fig, ax = plt.subplots(figsize=(10, 8))  # Larger size for better quality
-    sweden.plot(ax=ax, color='white', edgecolor='black')
+    fig, ax = plt.subplots(figsize=(10, 8))  # Set the figure size
+    sweden.plot(ax=ax, color='white', edgecolor='black')  # Plot the Sweden map
     
-    # Plotting the cities
-    city_gdf.plot(ax=ax, color='red', alpha=1.0)
+    # Plotting the cities with red markers for visibility
+    city_gdf.plot(ax=ax, marker='o', color='red', markersize=2, alpha=1.0)
     
-    # Remove axis
+    # Remove axis to clean up the plot
     ax.axis('off')
     
-    # Save the figure with high DPI
-    dpi = 600
-    plt.savefig("images/sweden_cities.png", dpi=dpi, bbox_inches='tight', pad_inches=0)  # High DPI for high quality
-
-    # Calculate and print pixel coordinates for each city in the saved image
-    for city, row in city_gdf.iterrows():
-        geo_x, geo_y = row['geometry'].x, row['geometry'].y
-        pixel_x, pixel_y = get_pixel_coords(ax, geo_x, geo_y, dpi)
-        print(f"{row['City']} pixel coordinates in saved image: ({pixel_x:.2f}, {pixel_y:.2f})")
+    dpi = 300  # Set a high DPI for better accuracy in image saving
+    plt.savefig("images/sweden_cities.png", dpi=dpi, bbox_inches='tight', pad_inches=0)
 
     plt.show()
 
@@ -72,7 +62,7 @@ def plot_map_without_cities():
     city_gdf.plot(ax=ax, color='red', alpha=0.0)
     
     # Save the figure with high DPI
-    dpi = 600
+    dpi = 300
     plt.savefig("images/sweden.png", dpi=dpi, bbox_inches='tight', pad_inches=0)  # High DPI for high quality
 
     plt.show()
@@ -80,3 +70,41 @@ def plot_map_without_cities():
 # Plot and save maps
 plot_map_with_cities()
 plot_map_without_cities()
+
+
+from PIL import Image
+import numpy as np
+
+# Load the image
+image_path = r"images\sweden_cities.png"
+image = Image.open(image_path)
+image_data = np.array(image)
+
+image_data_rgb = image_data[:, :, :3]
+
+# Define the red color range
+red_min = np.array([250, 0, 0], dtype="uint8")
+red_max = np.array([255, 100, 100], dtype="uint8")
+
+# Find red dots
+red_points = np.where(np.all(image_data_rgb >= red_min, axis=-1) & np.all(image_data_rgb <= red_max, axis=-1))
+
+# Get coordinates of red dots
+red_coordinates = list(zip(red_points[1], red_points[0]))  # Swap x and y
+# print("Red dot coordinates:", red_coordinates)
+red_coordinates = np.array(red_coordinates)
+from sklearn.cluster import DBSCAN
+
+dbscan = DBSCAN(eps=10, min_samples=5)
+clusters = dbscan.fit_predict(red_coordinates)
+
+# Extract cluster centers
+unique_clusters = set(clusters)
+cluster_centers = []
+for cluster in unique_clusters:
+    if cluster != -1: 
+        points_in_cluster = red_coordinates[clusters == cluster]
+        center = points_in_cluster.mean(axis=0)
+        cluster_centers.append((int(center[0]), int(center[1])))
+
+print("Cluster centers:", cluster_centers)
